@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Schedule Optimizer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            display: flex;
+            gap: 20px;
+        }
+        .course-selection {
+            flex: 1;
+        }
+        .schedule-display {
+            flex: 1;
+        }
+        .course-list {
+            height: 400px;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            padding: 10px;
+        }
+        .course-item {
+            padding: 5px;
+            margin: 5px 0;
+            cursor: pointer;
+        }
+        .course-item:hover {
+            background-color: #f0f0f0;
+        }
+        .selected {
+            background-color: #e0e0e0;
+        }
+        .schedule-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .schedule-table th, .schedule-table td {
+            border: 1px solid #ccc;
+            padding: 8px;
+            text-align: center;
+        }
+        .error-message {
+            color: red;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Schedule Optimizer</h1>
+    <div class="container">
+        <div class="course-selection">
+            <h2>Available Courses</h2>
+            <input type="text" id="searchInput" placeholder="Search courses..." 
+                   onkeyup="filterCourses()" style="width: 100%; margin-bottom: 10px;">
+            <div class="course-list" id="courseList">
+                {% for course in courses %}
+                <div class="course-item" onclick="toggleCourse(this)" 
+                     data-course-id="{{ course.id }}">
+                    {{ course.course_dept }} {{ course.course_code }} - {{ course.course_title }}
+                </div>
+                {% endfor %}
+            </div>
+            <button onclick="generateSchedule()" style="margin-top: 10px;">
+                Generate Schedule
+            </button>
+        </div>
+        <div class="schedule-display">
+            <h2>Optimized Schedule</h2>
+            <div id="scheduleContainer">
+                <table class="schedule-table">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Monday</th>
+                            <th>Tuesday</th>
+                            <th>Wednesday</th>
+                            <th>Thursday</th>
+                            <th>Friday</th>
+                        </tr>
+                    </thead>
+                    <tbody id="scheduleBody">
+                    </tbody>
+                </table>
+            </div>
+            <div id="errorMessage" class="error-message"></div>
+        </div>
+    </div>
+
+    <script>
+        const selectedCourses = new Set();
+
+        function toggleCourse(element) {
+            const courseId = element.dataset.courseId;
+            if (selectedCourses.has(courseId)) {
+                selectedCourses.delete(courseId);
+                element.classList.remove('selected');
+            } else {
+                selectedCourses.add(courseId);
+                element.classList.add('selected');
+            }
+        }
+
+        function filterCourses() {
+            const searchText = document.getElementById('searchInput').value.toLowerCase();
+            const courseItems = document.getElementsByClassName('course-item');
+            
+            for (let item of courseItems) {
+                const text = item.textContent.toLowerCase();
+                item.style.display = text.includes(searchText) ? '' : 'none';
+            }
+        }
+
+        function generateSchedule() {
+            if (selectedCourses.size === 0) {
+                document.getElementById('errorMessage').textContent = 
+                    'Please select at least one course.';
+                return;
+            }
+
+            document.getElementById('errorMessage').textContent = '';
+
+            fetch('/optimize', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    courses: Array.from(selectedCourses)
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    displaySchedule(data.schedule);
+                } else {
+                    document.getElementById('errorMessage').textContent = data.message;
+                }
+            })
+            .catch(error => {
+                document.getElementById('errorMessage').textContent = 
+                    'An error occurred while generating the schedule.';
+                console.error('Error:', error);
+            });
+        }
+
+        function displaySchedule(schedule) {
+            const scheduleBody = document.getElementById('scheduleBody');
+            scheduleBody.innerHTML = '';
+
+            // Create time slots from 8:00 to 21:00
+            const timeSlots = [];
+            for (let hour = 8; hour <= 21; hour++) {
+                const time = `${hour.toString().padStart(2, '0')}:00`;
+                timeSlots.push(time);
+            }
+
+            const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+            
+            // Create schedule grid
+            timeSlots.forEach(time => {
+                const row = document.createElement('tr');
+                const timeCell = document.createElement('td');
+                timeCell.textContent = time;
+                row.appendChild(timeCell);
+
+                days.forEach(day => {
+                    const cell = document.createElement('td');
+                    const coursesAtTime = schedule.filter(course => 
+                        course.day === day && course.time === time
+                    );
+
+                    if (coursesAtTime.length > 0) {
+                        const course = coursesAtTime[0];
+                        cell.textContent = `${course.course_dept} ${course.course_code}`;
+                        cell.title = course.course_title;
+                    }
+
+                    row.appendChild(cell);
+                });
+
+                scheduleBody.appendChild(row);
+            });
+        }
+    </script>
+</body>
+</html>
